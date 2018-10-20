@@ -58,7 +58,10 @@ ARTHAS_OPTS="-Djava.awt.headless=true"
 # $2 : err_msg
 exit_on_err()
 {
+    #如果有错误提示则输出
+    #-z 字符串长度是否为0
     [[ ! -z "${2}" ]] && echo "${2}" 1>&2
+    #退出整个脚本
     exit ${1}
 }
 
@@ -75,6 +78,7 @@ default()
 # check arthas permission
 check_permission()
 {
+    #检查安装目录有无权限
     [ ! -w ${HOME} ] \
         && exit_on_err 1 "permission denied, ${HOME} is not writeable."
 }
@@ -85,7 +89,7 @@ check_permission()
 reset_for_env()
 {
 
-    # init ARTHAS' lib
+    # init ARTHAS' lib(创建lib失败则退出)
     mkdir -p ${ARTHAS_LIB_DIR} \
         || exit_on_err 1 "create ${ARTHAS_LIB_DIR} fail."
 
@@ -95,8 +99,11 @@ reset_for_env()
 
     # iterater throught candidates to find a proper JAVA_HOME at least contains tools.jar which is required by arthas.
     if [ ! -d ${JAVA_HOME} ]; then
+        #获取机器上所有已安装的jdk的目录(/usr/java/jdk1.7.0_67/bin/java->/usr/java/jdk1.7.0_67)
         JAVA_HOME_CANDIDATES=($(ps aux | grep java | grep -v 'grep java' | awk '{print $11}' | sed -n 's/\/bin\/java$//p'))
+        #${JAVA_HOME_CANDIDATES[@]}->获取数组中的全部元素
         for JAVA_HOME_TEMP in ${JAVA_HOME_CANDIDATES[@]}; do
+            #检查是否存在并且是一个文件
             if [ -f ${JAVA_HOME_TEMP}/lib/tools.jar ]; then
                 JAVA_HOME=${JAVA_HOME_TEMP}
                 break
@@ -104,14 +111,15 @@ reset_for_env()
         done
     fi
 
-    # maybe 1.8.0_162 , 11-ea
+    # maybe 1.8.0_162 , 11-ea 获取大于jd5版本的jdk版本
     local JAVA_VERSION_STR=$(${JAVA_HOME}/bin/java -version 2>&1|awk -F '"' '$2>"1.5"{print $2}')
     # check the jvm version, we need 1.6+
+    # 没有存在符合条件的jdk版本
     [[ ! -x ${JAVA_HOME} || -z ${JAVA_VERSION_STR} ]] && exit_on_err 1 "illegal ENV, please set \$JAVA_HOME to JDK6+"
 
     local JAVA_VERSION
     if [[ $JAVA_VERSION_STR = "1."* ]]; then
-        JAVA_VERSION=$(echo $veJAVA_VERSION_STRr | sed -e 's/1\.\([0-9]*\)\(.*\)/\1/; 1q')
+        JAVA_VERSION=$(echo $JAVA_VERSION_STRr | sed -e 's/1\.\([0-9]*\)\(.*\)/\1/; 1q')
     else
         JAVA_VERSION=$(echo $JAVA_VERSION_STR | sed -e 's/\([0-9]*\)\(.*\)/\1/; 1q')
     fi
@@ -122,6 +130,8 @@ reset_for_env()
       if [ ! -f ${JAVA_HOME}/lib/tools.jar ]; then
           exit_on_err 1 "${JAVA_HOME}/lib/tools.jar does not exist, arthas could not be launched!"
       else
+          #当用java -jar yourJarExe.jar来运行一个经过打包的应用程序的时候，你会发现如何设置-classpath参数应用程序都找不到相应的第三方类，报ClassNotFound错误。实际上这是由于当使用-jar参数运行的时候，java VM会屏蔽所有的外部classpath,而只以本身yourJarExe.jar的内部class作为类的寻找范围
+          #Xbootclasspath/a: 后缀在核心class搜索路径后面.常用!!
           BOOT_CLASSPATH=-Xbootclasspath/a:${JAVA_HOME}/lib/tools.jar
       fi
     fi
@@ -231,6 +241,8 @@ parse_arguments()
 
     if [ "$1" = "-b" ]; then
        BATCH_MODE=true
+       #位置参数可以用shift命令左移。比如shift 3表示原来的$4现在变成$1，原来的$5现在变成$2等等，原来的$1、$2、$3丢弃，$0不移动。不带参数的shift命令相当于shift 1。
+       #非常有用的 Unix 命令:shift。我们知道，对于位置变量或命令行参数，其个数必须是确定的，或者当 Shell 程序不知道其个数时，可以把所有参数一起赋值给变量$*。若用户要求 Shell 在不知道位置变量个数的情况下，还能逐个的把参数一一处理，也就是在 $1 后为 $2,在 $2 后面为 $3 等。在 shift 命令执行前变量 $1 的值在 shift 命令执行后就不可用了
        shift
        if [ "$1" = "-f" ]; then
            if [ "x$2" != "x" ] && [ -f $2 ]; then
@@ -246,6 +258,7 @@ parse_arguments()
     fi
 
     if [ "$1" = "debug" ] ; then
+      #str字符串长度是否为0
       if [ -z "$JPDA_TRANSPORT" ]; then
         JPDA_TRANSPORT="dt_socket"
       fi
@@ -282,7 +295,7 @@ parse_arguments()
 
     # check pid
     if [ -z ${TARGET_PID} ] && [ ${BATCH_MODE} = false ]; then
-        # interactive mode
+        # interactive mode 以回车做为分隔符，IFS必须为：$’\n’
         IFS=$'\n'
         CANDIDATES=($(${JAVA_HOME}/bin/jps -l | grep -v sun.tools.jps.Jps | awk '{print $0}'))
 
@@ -295,7 +308,7 @@ parse_arguments()
 
         index=0
         suggest=1
-        # auto select tomcat/pandora-boot process
+        # auto select tomcat/pandora-boot process获取数组中所有元素
         for process in "${CANDIDATES[@]}"; do
             index=$(($index+1))
             if [ $(echo ${process} | grep -c org.apache.catalina.startup.Bootstrap) -eq 1 ] \
@@ -452,7 +465,7 @@ main()
     check_permission
 
     reset_for_env
-
+    #$@：表示所有脚本参数的内容
     parse_arguments "${@}" \
         || exit_on_err 1 "$(usage)"
 
